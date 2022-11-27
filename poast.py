@@ -89,9 +89,6 @@ async def run_client(server, msg):
         event = make_event_message(make_event(msg))
         await websocket.send(event)
 
-        response = await websocket.recv()
-        print(response)
-
 
 server = sys.argv[1]
 msg = sys.argv[2]

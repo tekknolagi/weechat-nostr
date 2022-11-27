@@ -5,6 +5,8 @@ import json
 import signal
 import sys
 import websockets
+import weechat
+
 
 
 SUBSCRIPTION_ID = "maxmaxmax"
@@ -28,27 +30,45 @@ def display_message(message):
     if ty == "NOTICE":
         print(*message)
         return
-    ty, subscription_id, event = message
-    content = event["content"]
-    print(short_id(event["id"]), content)
+    if message[0] == "EVENT":
+        ty, subscription_id, event = message
+        content = event["content"]
+        print(short_id(event["id"]), content)
+    else:
+        print("Unknown message type", message[0])
 
 
-async def run_client(server):
+# callback for data received in input
+def buffer_input_cb(data, buffer, input_data):
+    weechat.prnt("", f"buffer is {buffer}")
+    weechat.prnt(weechat.current_buffer(), "Cannot send messages yet. Sorry!")
+    return weechat.WEECHAT_RC_OK
+
+# callback called when buffer is closed
+def buffer_close_cb(data, buffer):
+    weechat.prnt(weechat.current_buffer(), "Goodbye.")
+    return weechat.WEECHAT_RC_OK
+
+
+weechat.register("nostr", "Max B", "0.0", "MIT", "Use weechat as a nostr client", "", "")
+buffer = weechat.buffer_new("nostr", "buffer_input_cb", "", "buffer_close_cb", "")
+weechat.buffer_set(buffer, "title", "nostr buffer")
+
+
+async def main():
+    server = SERVER
     async with websockets.connect(server) as websocket:
         # Close the connection when receiving SIGTERM.
-        loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGTERM, loop.create_task, websocket.close())
+        # loop = asyncio.get_running_loop()
+        # loop.add_signal_handler(signal.SIGTERM, loop.create_task, websocket.close())
 
         await websocket.send(
             make_request(SUBSCRIPTION_ID, {"limit": 100, "since": 1669524090})
         )
+        await asyncio.sleep(0)  # yield control to the event loop
         async for message in websocket:
-            display_message(json.loads(message))
+            weechat.prnt(buffer, message)
+            await asyncio.sleep(0)  # yield control to the event loop
+            # display_message(json.loads(message))
 
-
-server = sys.argv[1]
-
-try:
-    asyncio.run(run_client(server))
-except KeyboardInterrupt:
-    print("Goodbye.")
+asyncio.run(main())
