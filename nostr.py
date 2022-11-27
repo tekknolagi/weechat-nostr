@@ -231,7 +231,7 @@ def main():
     # TODO(max): Figure out how to receive the message backlog in the opposite
     # order. Right now it's sorted new->old, which makes for a confusing
     # message history because weechat will append to the bottom (oldest) as new
-    # messages roll in later.
+    # messages roll in later. Use EOSE apparently?
     ws.send(
         make_request(
             SUBSCRIPTION_ID, {"limit": RECENT_MESSAGE_LIMIT, "since": 1669524090}
