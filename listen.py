@@ -78,13 +78,6 @@ def make_event_message(event):
     return slim_json_dump(["EVENT", event])
 
 
-def buffer_input_cb(data, buffer, input_data):
-    # Sending the message should also trigger the receive hook, which will add
-    # it to the buffer.
-    router.send_message(input_data)
-    return weechat.WEECHAT_RC_OK
-
-
 def buffer_close_cb(data, buffer):
     weechat.prnt(weechat.current_buffer(), "Goodbye.")
     return weechat.WEECHAT_RC_OK
@@ -148,9 +141,12 @@ class Router:
         else:
             weechat.prnt(self.buffer, message_raw)
 
-    def send_message(self, msg):
-        event = make_event_message(make_event(msg))
+    def buffer_input_cb(self, data, buffer, input_data):
+        # Sending the message should also trigger the receive hook, which will add
+        # it to the buffer.
+        event = make_event_message(make_event(input_data))
         self.ws.send(event)
+        return weechat.WEECHAT_RC_OK
 
 
 def main():
@@ -165,11 +161,12 @@ def main():
 
     # This boundmethod trick allows us to keep context in the router for the
     # callbacks
-    global router
     limit = 100
     router = Router(ws, buffer)
     global receive_ws_callback
     receive_ws_callback = router.receive_ws_callback
+    global buffer_input_cb
+    buffer_input_cb = router.buffer_input_cb
     weechat.hook_fd(
         ws.sock.fileno(),
         1,
@@ -186,4 +183,7 @@ def main():
     ws.send(make_request(SUBSCRIPTION_ID, {"limit": limit, "since": 1669524090}))
 
 
-main()
+if __name__ == "__main__":
+    # TODO(max): Add commands to connect to server, set initial subscription
+    # limit, query filters, etc
+    main()
