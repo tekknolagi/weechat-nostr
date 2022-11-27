@@ -182,6 +182,8 @@ class Router:
         ty = message_json[0]
         if ty == "EVENT":
             event = message_json[2]
+            if event["id"] in self.displayed:
+                return
             self.db.add(event)
             kind = event["kind"]
             if kind == EventKind.text_note:
