@@ -111,7 +111,7 @@ class DB:
     def fetch_recent(self, limit):
         cursor = self.connection.cursor()
         cursor.execute(
-            "SELECT event_body FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
+            "SELECT event_body FROM events ORDER BY created_at ASC LIMIT ?", (limit,)
         )
         return [json.loads(event_row[0]) for event_row in cursor.fetchall()]
 
