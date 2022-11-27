@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import signal
 import sys
 import websockets
 
@@ -34,9 +35,16 @@ def display_message(message):
 
 async def run_client(server):
     async with websockets.connect(server) as websocket:
-        await websocket.send(make_request(SUBSCRIPTION_ID))
-        message = json.loads(await websocket.recv())
-        display_message(message)
+        # Close the connection when receiving SIGTERM.
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGTERM, loop.create_task, websocket.close())
+
+        await websocket.send(
+            make_request(SUBSCRIPTION_ID, {"limit": 100, "since": 1669524090})
+        )
+        async for message in websocket:
+            display_message(json.loads(message))
+
 
 server = sys.argv[1]
 

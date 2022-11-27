@@ -1,2 +1,1 @@
 websockets==10.4
-secp256k1==0.14.0
