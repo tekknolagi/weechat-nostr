@@ -24,6 +24,7 @@ PRIVKEY = b"x" * 32
 PUBKEY = bip340.pubkey_gen(PRIVKEY)
 SUBSCRIPTION_ID = str(uuid.uuid4())
 SERVER = "wss://nostr-pub.wellorder.net"
+RECENT_MESSAGE_LIMIT = 100
 
 
 class EventKind:
@@ -129,7 +130,7 @@ class Router:
         self.ws = ws
         self.buffer = buffer
         self.db = db
-        events = db.fetch_recent(100)
+        events = db.fetch_recent(RECENT_MESSAGE_LIMIT)
         self.displayed = set()
         for event in events:
             self.display_event(event)
@@ -210,7 +211,6 @@ def main():
 
     # This boundmethod trick allows us to keep context in the router for the
     # callbacks
-    limit = 100
     db = DB()
     router = Router(ws, buffer, db)
     global receive_ws_callback
@@ -230,7 +230,11 @@ def main():
     # order. Right now it's sorted new->old, which makes for a confusing
     # message history because weechat will append to the bottom (oldest) as new
     # messages roll in later.
-    ws.send(make_request(SUBSCRIPTION_ID, {"limit": limit, "since": 1669524090}))
+    ws.send(
+        make_request(
+            SUBSCRIPTION_ID, {"limit": RECENT_MESSAGE_LIMIT, "since": 1669524090}
+        )
+    )
 
 
 if __name__ == "__main__":
