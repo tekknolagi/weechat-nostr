@@ -1,24 +1,23 @@
 #!/usr/bin/env python
 
 import asyncio
+import bip340
 import hashlib
 import json
 import signal
 import sys
-import websocket
 import ssl
 import time
+import uuid
+import websocket
 import weechat
-from bip340 import pubkey_gen as PublicKey, schnorr_sign
 
 
-def PrivateKey(x):
-    return x
+# TODO(you) Fill in your privkey! It must be 32 bytes long.
+PRIVKEY = b"x" * 32
 
-
-PRIVKEY = PrivateKey(b"x" * 32)
-PUBKEY = PublicKey(PRIVKEY)
-SUBSCRIPTION_ID = "maxmaxmax"
+PUBKEY = bip340.pubkey_gen(PRIVKEY)
+SUBSCRIPTION_ID = str(uuid.uuid4())
 SERVER = "wss://nostr-pub.wellorder.net"
 
 
@@ -39,7 +38,7 @@ def hash_json_of(obj):
 
 def sign(obj):
     assert isinstance(obj, bytes)
-    raw_sig = schnorr_sign(obj, PRIVKEY, aux_rand=b"x" * 32)
+    raw_sig = bip340.schnorr_sign(obj, PRIVKEY, aux_rand=b"x" * 32)
     return raw_sig.hex()
 
 
