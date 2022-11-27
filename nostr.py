@@ -12,6 +12,11 @@ import uuid
 import websocket
 import weechat
 
+try:
+    import sqlite3
+except ImportError:
+    sqlite3 = None
+
 
 # TODO(you) Fill in your privkey! It must be 32 bytes long.
 PRIVKEY = b"x" * 32
@@ -25,6 +30,7 @@ class EventKind:
     set_metadata = 0
     text_note = 1
     recommend_server = 2
+    chat_message = 42
 
 
 def slim_json_dump(obj):
@@ -87,10 +93,46 @@ def short_id(pubkey, length=8):
     return pubkey[: length // 2] + "..." + pubkey[-length // 2 :]
 
 
+class DB:
+    def __init__(self):
+        self.connection = sqlite3.connect("events.db")
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "CREATE TABLE IF NOT EXISTS events(event_id STRING, created_at INTEGER, event_body STRING, UNIQUE(event_id))"
+        )
+
+    def find(self, event_id):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT event_body FROM events WHERE event_id = ? LIMIT 1", (event_id,)
+        )
+        return json.loads(cursor.fetchone()[0])
+
+    def fetch_recent(self, limit):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT event_body FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
+        )
+        return [json.loads(event_row[0]) for event_row in cursor.fetchall()]
+
+    def add(self, event):
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO events VALUES(?, ?, ?)",
+            (event["id"], event["created_at"], slim_json_dump(event)),
+        )
+        self.connection.commit()
+
+
 class Router:
-    def __init__(self, ws, buffer):
+    def __init__(self, ws, buffer, db):
         self.ws = ws
         self.buffer = buffer
+        self.db = db
+        events = db.fetch_recent(100)
+        self.displayed = set()
+        for event in events:
+            self.display_event(event)
 
     def receive_ws_callback(self, data, fd):
         # TODO(max): Why is this a loop?
@@ -115,29 +157,36 @@ class Router:
             break
         return weechat.WEECHAT_RC_OK
 
+    def display_event(self, event):
+        if event["id"] in self.displayed:
+            return
+        self.displayed.add(event["id"])
+        sender = short_id(event["pubkey"])
+        message = event["content"]
+        created_at = event["created_at"]
+        tags = "notify_message,nick_%s,prefix_nick_%s,log1" % (
+            sender,
+            weechat.config_string(weechat.config_get("weechat.color.chat_nick_self")),
+        )
+        msg = "%s%s\t%s" % (
+            weechat.color("chat_nick_self"),
+            sender,
+            message,
+        )
+        weechat.prnt_date_tags(self.buffer, created_at, tags, msg)
+
     def display_message(self, data):
         message_raw = data.decode("utf-8")
         message_json = json.loads(message_raw)
         ty = message_json[0]
         if ty == "EVENT":
             event = message_json[2]
-            sender = short_id(event["pubkey"])
-            message = event["content"]
+            self.db.add(event)
             kind = event["kind"]
-            created_at = event["created_at"]
             if kind == EventKind.text_note:
-                tags = "notify_message,nick_%s,prefix_nick_%s,log1" % (
-                    sender,
-                    weechat.config_string(
-                        weechat.config_get("weechat.color.chat_nick_self")
-                    ),
-                )
-                msg = "%s%s\t%s" % (
-                    weechat.color("chat_nick_self"),
-                    sender,
-                    message,
-                )
-                weechat.prnt_date_tags(self.buffer, created_at, tags, msg)
+                self.display_event(event)
+            else:
+                weechat.prnt(self.buffer, f"<Event of kind {kind}>")
         else:
             weechat.prnt(self.buffer, message_raw)
 
@@ -162,7 +211,8 @@ def main():
     # This boundmethod trick allows us to keep context in the router for the
     # callbacks
     limit = 100
-    router = Router(ws, buffer)
+    db = DB()
+    router = Router(ws, buffer, db)
     global receive_ws_callback
     receive_ws_callback = router.receive_ws_callback
     global buffer_input_cb
