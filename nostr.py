@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+"""
+This is some of the worst code I've written in a long time... I'm sorry.
+"""
+
 import asyncio
 import bip340
 import hashlib
@@ -134,6 +138,8 @@ class Router:
         self.displayed = set()
         for event in events:
             self.display_event(event)
+        self.buffering = True
+        self.buffered = []
 
     def receive_ws_callback(self, data, fd):
         # TODO(max): Why is this a loop?
@@ -176,6 +182,12 @@ class Router:
         )
         weechat.prnt_date_tags(self.buffer, created_at, tags, msg)
 
+    def disable_buffering(self):
+        self.buffering = False
+        for event in sorted(self.buffered, key=lambda event: int(event["created_at"])):
+            self.display_event(event)
+        self.buffered = []
+
     def display_message(self, data):
         message_raw = data.decode("utf-8")
         message_json = json.loads(message_raw)
@@ -185,11 +197,16 @@ class Router:
             if event["id"] in self.displayed:
                 return
             self.db.add(event)
+            if self.buffering:
+                self.buffered.append(event)
+                return
             kind = event["kind"]
             if kind == EventKind.text_note:
                 self.display_event(event)
             else:
                 weechat.prnt(self.buffer, f"<Event of kind {kind}>")
+        elif ty == "EOSE":
+            self.disable_buffering()
         else:
             weechat.prnt(self.buffer, message_raw)
 
@@ -228,10 +245,6 @@ def main():
         "",
     )
     ws.sock.setblocking(0)
-    # TODO(max): Figure out how to receive the message backlog in the opposite
-    # order. Right now it's sorted new->old, which makes for a confusing
-    # message history because weechat will append to the bottom (oldest) as new
-    # messages roll in later. Use EOSE apparently?
     ws.send(
         make_request(
             SUBSCRIPTION_ID, {"limit": RECENT_MESSAGE_LIMIT, "since": 1669524090}
