@@ -42,11 +42,7 @@ class Post(Event):
         super().__init__(f"{author}: {content}")
 
 
-def render_message(message_raw):
-    try:
-        message = json.loads(message_raw)
-    except BaseException:
-        return Message(f"RAW: {message_raw}")
+def render_message(message):
     ty = message[0]
     if ty == "NOTICE":
         return Message(f"NOTICE: {message[1]}")
@@ -54,7 +50,14 @@ def render_message(message_raw):
         _, subscription_id, event = message
         content = event["content"]
         return Post(short_id(event["id"]), content)
-    return Message(message_raw)
+    return Message(message)
+
+
+def order_msg(msg):
+    ty = msg[0]
+    if ty != "EVENT":
+        return 0
+    return msg[2]["created_at"]
 
 
 class Demo(App):
@@ -76,7 +79,20 @@ class Demo(App):
     async def fetch_messages(self):
         messages = self.query_one("#messages")
         async for message in self.websocket:
-            self.display_message(message)
+            # TODO(max): Figure out how to scroll to the bottom on new messages
+            self.display_message(json.loads(message))
+
+    async def fetch_initial_messages(self):
+        messages = self.query_one("#messages")
+        received = []
+        async for message in self.websocket:
+            j = json.loads(message)
+            if j[0] == "EOSE":
+                break
+            received.append(j)
+        for msg in sorted(received, key=order_msg):
+            messages.mount(render_message(msg))
+        asyncio.create_task(self.fetch_messages())
 
     async def on_mount(self) -> None:
         messages = self.query_one("#messages")
@@ -84,7 +100,7 @@ class Demo(App):
         messages.mount(Message("...connected!"))
         await self.websocket.send(make_request(SUBSCRIPTION_ID, {"limit": 100}))
         messages.mount(Message("...subscribed!"))
-        asyncio.create_task(self.fetch_messages())
+        asyncio.create_task(self.fetch_initial_messages())
         messages.mount(Message("...now fetching!"))
 
     def action_toggle_dark(self) -> None:
