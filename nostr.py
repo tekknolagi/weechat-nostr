@@ -36,6 +36,7 @@ class EventKind:
     text_note = 1
     recommend_server = 2
     chat_message = 42
+    irritating_frequent_thing = 70202
 
 
 def slim_json_dump(obj):
@@ -203,6 +204,8 @@ class Router:
             kind = event["kind"]
             if kind == EventKind.text_note:
                 self.display_event(event)
+            elif kind == EventKind.irritating_frequent_thing:
+                return
             else:
                 weechat.prnt(self.buffer, f"<Event of kind {kind}>")
         elif ty == "EOSE":
